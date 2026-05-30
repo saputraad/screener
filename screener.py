@@ -53,6 +53,7 @@ if ticker_input:
             sector = info.get('sector', 'N/A')
             
             eps = info.get('trailingEps', np.nan)
+            pe_ratio = info.get('trailingPE', np.nan)  # Perbaikan nama variabel agar konsisten
             roe = info.get('returnOnEquity', np.nan)
             rev_growth = info.get('revenueGrowth', np.nan)
             der = info.get('debtToEquity', np.nan)
@@ -125,7 +126,7 @@ if ticker_input:
                             buffett_buy_limit = fair_price * 0.80
                             mos = ((fair_price - current_price) / fair_price) * 100
                         else:
-                            # Fallback rasional jika book value perbankan/manufaktur bias
+                            # Fallback rasional jika data kosong
                             fair_price = eps * 12 if (not pd.isna(eps) and eps > 0) else current_price * 1.15
                             buffett_buy_limit = fair_price * 0.80
                             mos = ((fair_price - current_price) / fair_price) * 100
@@ -140,18 +141,15 @@ if ticker_input:
                         if current_price < buffett_buy_limit:
                             st.success(f"🟢 **Rekomendasi: ACCUMULATE BUY.** Harga pasar saat ini berada di zona diskon yang sangat aman dari batas psikologis Buffett. Ideal untuk dicicil beli secara konstan.")
                         else:
-                            st.warning(f"🟡 **Rekomendasi: HOLD / WAIT FOR DIP.** Saham ini luar biasa sehat, tetapi harganya saat ini sudah mendekati/melebihi batas aman beli konservatif. Pertahankan kepemilikan, atau tunggu koreksi sehat pasar jika ingin menambah posisi baru.")
+                            st.warning(f"🟡 **Rekomendasi: HOLD / WAIT FOR DIP.** Saham ini luar biasa sehat, tetapi harganya saat ini sudah mendekati/melebihi batas aman beli konservatif.")
                             
                     else:
-                        # JANGKA PENDEK / MOMENTUM: Menggunakan Kalkulator Batas Risiko & Manajemen Modal
+                        # JANGKA PENDEK / MOMENTUM: Menggunakan Kalkulator Batas Risiko
                         st.write("### ⚡ Rencana Eksekusi Trading & Batas Manajemen Risiko")
-                        st.caption("Aplikasi mengabaikan harga wajar kaku aset untuk menghindari bias data ekstrim (seperti kasus BRPT/BREN). Fokus pada Risk/Reward Ratio harian 1:2.")
                         
-                        # Menghitung batas pergerakan berdasarkan standar deviasi volatilitas 20 hari terakhir
                         if len(df_hist) >= 20:
                             pct_change = df_hist['Close'].pct_change()
                             volatility = pct_change.std()
-                            # Menghitung batas rugi rasional berdasarkan volatilitas saham (minimal 4% risiko)
                             risk_factor = max(volatility * 2, 0.05)
                         else:
                             risk_factor = 0.05
@@ -163,10 +161,6 @@ if ticker_input:
                         t1.markdown(f"<div class='metric-box'>Area Harga Entry<br><span style='color:#0f172a; font-size:18px;'>Rp {current_price:,}</span></div>", unsafe_allow_html=True)
                         t2.markdown(f"<div class='metric-box'>Target Profit (TP)<br><span style='color:#16a34a; font-size:18px;'>Rp {round(take_profit):,}</span><br><small style='color:green;'>+{round(risk_factor*2*100)}%</small></div>", unsafe_allow_html=True)
                         t3.markdown(f"<div class='metric-box'>Batas Potong Rugi (SL)<br><span style='color:#dc2626; font-size:18px;'>Rp {round(stop_loss):,}</span><br><small style='color:red;'>-{round(risk_factor*100)}%</small></div>", unsafe_allow_html=True)
-                        
-                        st.write("")
-                        st.write("**📌 Panduan Aksi Jangka Pendek:**")
-                        st.info("⚡ **Rekomendasi: TACTICAL SWING.** Masuk pasar hanya jika Anda disiplin menerapkan Stop Loss. Target profit ditargetkan secara realistis memanfaatkan ombak momentum jangka pendek.")
                 
                 with col_right:
                     st.write("### 🏥 Parameter Dasar Finansial")
@@ -174,7 +168,7 @@ if ticker_input:
                         "Metrik Finansial": ["PBV Ratio", "PE Ratio", "ROE (%)", "Revenue Growth (%)", "Dividend Yield (%)"],
                         "Nilai Riil": [
                             f"{round(pbv, 2)} x" if not pd.isna(pbv) else "N/A",
-                            f"{round(pe, 2)} x" if not pd.isna(pe) else "N/A",
+                            f"{round(pe_ratio, 2)} x" if not pd.isna(pe_ratio) else "N/A",  # Sudah diperbaiki ke pe_ratio
                             f"{round(roe*100, 2)} %" if not pd.isna(roe) else "N/A",
                             f"{round(rev_growth*100, 2)} %" if not pd.isna(rev_growth) else "0.0 %",
                             f"{round(div_yield*100, 2)} %" if div_yield > 0 else "0.0 %"
@@ -192,15 +186,13 @@ if ticker_input:
                 pros_list = []
                 cons_list = []
                 
-                # Pengujian Kriteria Peluang (Pros)
                 if not pd.isna(roe) and roe > 0.15:
-                    pros_list.append(f"**Efisiensi Bisnis Sangat Tinggi (ROE: {round(roe*100,1)}%):** Manajemen terbukti sangat andal dalam mengonversi setiap modal pemegang saham menjadi laba bersih aktual.")
+                    pros_list.append(f"**Efisiensi Bisnis Sangat Tinggi (ROE: {round(roe*100,1)}%):** Manajemen andal mengonversi ekuitas menjadi laba bersih.")
                 if not pd.isna(rev_growth) and rev_growth > 0.10:
-                    pros_list.append(f"**Skalabilitas Pasar Kuat (Growth: {round(rev_growth*100,1)}%):** Perusahaan terus berhasil membesarkan pangsa pasarnya, mengindikasikan produk/jasanya memiliki keunggulan kompetitif (*Moat*).")
+                    pros_list.append(f"**Skalabilitas Kuat (Growth: {round(rev_growth*100,1)}%):** Pangsa pasar terus membesar.")
                 if div_yield > 0.04:
-                    pros_list.append(f"**Dividen Protektif Tinggi (Yield: {round(div_yield*100,1)}%):** Perusahaan royal membagikan laba tunai secara berkala, memberikan arus kas pasif (*safety net*) yang tebal bagi investor.")
+                    pros_list.append(f"**Dividen Protektif Tinggi (Yield: {round(div_yield*100,1)}%):** Arus kas pasif aman.")
                 
-                # Pengujian data volume historis untuk melihat aksi Bandar harian
                 if len(df_hist) >= 20:
                     df_hist['Avg_Vol_20'] = df_hist['Volume'].rolling(window=20).mean()
                     df_hist['MA50'] = df_hist['Close'].rolling(window=50).mean()
@@ -209,65 +201,49 @@ if ticker_input:
                     ma50_val = latest_row['MA50']
                     
                     if vol_ratio >= 1.5:
-                        pros_list.append(f"**Aksi Akumulasi Likuiditas Masif (Volume Spike: {round(vol_ratio, 1)}x):** Terjadi lonjakan volume transaksi sangat tajam di atas rata-rata perdagangan bulanan. Sinyal valid bahwa pemodal institusi besar atau 'Bandar' sedang aktif menggerakkan saham ini.")
+                        pros_list.append(f"**Aksi Akumulasi Likuiditas Masif (Volume Spike: {round(vol_ratio, 1)}x):** Ada pergerakan 'Big Money' masuk.")
                     if current_price > ma50_val:
-                        pros_list.append("**Struktur Tren Sehat (Bullish):** Harga bertengger dengan aman di atas garis rata-rata 50 hari (MA50), mengonfirmasi dominasi pembeli yang kuat di pasar.")
+                        pros_list.append("**Struktur Tren Sehat (Bullish):** Harga bertengger di atas MA50.")
                     else:
-                        cons_list.append("**Struktur Tren Melemah (Bearish):** Grafik harga saat ini bergerak di bawah garis MA50. Secara teknikal, saham sedang berada di jalur penurunan, berisiko mengalami *floating loss* jika langsung masuk dalam jumlah besar sekaligus.")
-                else:
-                    vol_ratio = 1.0
-                    ma50_val = current_price
+                        cons_list.append("**Struktur Tren Melemah (Bearish):** Tren grafik di bawah MA50, ada risiko penurunan jangka pendek.")
                 
-                # Pengujian Kriteria Risiko / Celah yang Perlu Diwaspadai (Cons)
                 if not pd.isna(der) and der > 160 and not is_banking:
-                    cons_list.append(f"**Beban Utang Di Atas Batas Aman (DER: {round(der,1)}%):** Struktur modal perusahaan sangat terbebani oleh kewajiban utang eksternal. Waspadai risiko lonjakan beban bunga jika kondisi makro memburuk.")
+                    cons_list.append(f"**Beban Utang Tinggi (DER: {round(der,1)}%):** Risiko struktur modal terbebani.")
                 if not pd.isna(pbv) and pbv > 3.5:
-                    cons_list.append(f"**Valuasi Premium / Sangat Premium (PBV: {round(pbv,1)}x):** Harga pasar saat ini sudah menghargai nilai aset buku perusahaan dengan harga yang sangat mahal. Ruang toleransi kesalahan fundamental menjadi sangat sempit.")
+                    cons_list.append(f"**Valuasi Premium (PBV: {round(pbv,1)}x):** Harga aset sudah dihargai mahal oleh pasar.")
                 if not pd.isna(rev_growth) and rev_growth < 0:
-                    cons_list.append(f"**Kemunduran Omset Bisnis (Revenue Drop: {round(rev_growth*100,1)}%):** Penjualan tahunan mengalami penurunan. Waspadai tanda-tanda bisnis yang mulai kehilangan daya saing atau pasarnya sudah jenuh.")
+                    cons_list.append(f"**Kemunduran Omset Bisnis (Revenue Drop):** Penjualan tahunan melambat.")
                     
-                # Pengaman jika daftar kosong agar tampilan tetap rapi
-                if not pros_list: pros_list.append("Tidak ada indikator keunggulan ekstrim yang mencolok saat ini. Performa fundamental berjalan normal.")
-                if not cons_list: cons_list.append("Tidak ada celah risiko struktural yang membahayakan. Keuangan internal terkendali dengan aman.")
+                if not pros_list: pros_list.append("Performa fundamental berjalan normal.")
+                if not cons_list: cons_list.append("Tidak ada celah risiko struktural yang membahayakan.")
                 
                 col_pro, col_con = st.columns(2)
                 with col_pro:
                     st.write("#### 🟢 Peluang Keuntungan & Sentimen Positif:")
-                    for pro in pros_list:
-                        st.markdown(f"<div class='pro-box'>{pro}</div>", unsafe_allow_html=True)
+                    for pro in pros_list: st.markdown(f"<div class='pro-box'>{pro}</div>", unsafe_allow_html=True)
                 with col_con:
                     st.write("#### ⚠️ Celah Risiko & Hal yang Wajib Diwaspadai:")
-                    for con in cons_list:
-                        st.markdown(f"<div class='con-box'>{con}</div>", unsafe_allow_html=True)
+                    for con in cons_list: st.markdown(f"<div class='con-box'>{con}</div>", unsafe_allow_html=True)
                         
             # ------------------------------------------
             # TAB 2: LIVE NEWS & CORPORATE ACTION SCRAPER
             # ------------------------------------------
             with tab2:
                 st.write("### 📰 Integrasi Sentimen Berita & Informasi Aksi Korporasi Terkini")
-                st.caption("Sistem menyaring kata kunci berita pasar secara *real-time* untuk mendeteksi agenda RUPS, pembagian Dividen, atau aksi korporasi krusial lainnya.")
-                
                 news_list = ticker.news
                 if news_list:
                     for news in news_list[:4]:
                         title = news.get('title', 'N/A')
                         publisher = news.get('publisher', 'N/A')
                         link = news.get('link', '#')
-                        
-                        # Mesin deteksi kata kunci otomatis
-                        is_catalyst = any(k in title.lower() for k in ['rups', 'dividen', 'dividend', 'rights issue', 'laba', 'profit', 'tumbuh', 'acquisition', 'merger'])
+                        is_catalyst = any(k in title.lower() for k in ['rups', 'dividen', 'dividend', 'rights issue', 'laba', 'profit', 'tumbuh'])
                         
                         if is_catalyst:
-                            st.markdown(f"""
-                            <div class='catalyst-card'>
-                                <strong>🚨 KATALIS FINANSIAL UTAMA: <a href='{link}' target='_blank'>{title}</a></strong><br>
-                                <small>Sumber Analisis: {publisher} | Sentimen: Berpotensi Tinggi Memicu Pergerakan Harga Saham</small>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            st.markdown(f"<div class='catalyst-card'><strong>🚨 KATALIS FINANSIAL UTAMA: <a href='{link}' target='_blank'>{title}</a></strong><br><small>Sumber: {publisher}</small></div>", unsafe_allow_html=True)
                         else:
                             st.write(f"🔹 **[{publisher}]** [{title}]({link})")
                 else:
-                    st.info("Tidak ada berita material atau agenda pengumuman aksi korporasi terbaru yang terdeteksi dalam radar pasar terdekat.")
+                    st.info("Tidak ada berita material terbaru.")
 
         except Exception as e:
             st.error(f"Sistem gagal mengekstrak data komprehensif emiten: {str(e)}")
