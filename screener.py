@@ -3,195 +3,171 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# 1. KONFIGURASI HALAMAN (UI/UX)
+# 1. KONFIGURASI HALAMAN UI/UX
 st.set_page_config(
-    page_title="IDX Ultimate Multibagger Screener",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="IDX Deep Stock Analyzer",
+    page_icon="🔍",
+    layout="wide"
 )
 
-# Custom CSS Premium UI
+# Custom Styling Premium UI
 st.markdown("""
     <style>
-    .main { background-color: #f4f6f9; }
-    .stMetric { background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-left: 5px solid #1E3A8A; }
-    h1 { color: #1E3A8A; font-weight: 800; font-family: 'Helvetica Neue', sans-serif; }
-    h3 { color: #1E40AF; font-weight: 600; }
-    .stButton>button { background-color: #1E3A8A; color: white; border-radius: 8px; }
+    .main { background-color: #f8fafc; }
+    .report-card { background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border-left: 5px solid #1e3a8a; }
+    .metric-box { background-color: #f1f5f9; padding: 10px 15px; border-radius: 8px; text-align: center; font-weight: bold; }
+    h2 { color: #1e3a8a; margin-bottom: 15px; }
+    h4 { color: #475569; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. SELEKSI DATA EMITEN SECARA MASAL & AKURAT
-@st.cache_data(ttl=3600)
-def load_all_idx_data():
-    """Menarik semua emiten dari repositori publik dan mengunduh metrik dari Yahoo Finance"""
-    url = "https://raw.githubusercontent.com/manvisg/indonesian-stock-tickers/main/tickers.csv"
-    try:
-        df_raw = pd.read_csv(url)
-        ticker_col = [col for col in df_raw.columns if 'ticker' in col.lower() or 'symbol' in col.lower()][0]
-        raw_tickers = df_raw[ticker_col].dropna().unique().tolist()
-    except:
-        try:
-            backup_url = "https://raw.githubusercontent.com/yandis/indonesia-stock-list/master/data/stock_list.csv"
-            df_raw = pd.read_csv(backup_url)
-            raw_tickers = df_raw.iloc[:, 0].dropna().unique().tolist()
-        except:
-            # Fallback jika terjadi kegagalan jaringan internet total
-            raw_tickers = ["BBCA", "BBRI", "BMRI", "BBNI", "ASII", "TLKM", "UNVR", "ADRO", "PTBA", "ITMG", "AMRT", "ICBP"]
+st.title("🔍 IDX Deep Stock Analyzer")
+st.caption("Masukkan Kode Saham untuk Melakukan Analisis Komprehensif Berdasarkan 4 Metode Multibagger")
+st.write("---")
 
-    all_data = []
-    progress_bar = st.progress(0, text="Menghubungkan ke Bursa Efek Indonesia & mengunduh data finansial...")
-    total = len(raw_tickers)
+# 2. INPUT KODE SAHAM (DENGAN UX YANG MUDAH)
+col_input, _ = st.columns([1, 2])
+with col_input:
+    ticker_input = st.text_input("✍️ Ketik Kode Saham IDX (Contoh: BBCA, ADRO, AMRT):", value="ADRO").strip().upper()
+
+if ticker_input:
+    ticker_sym = f"{ticker_input}.JK"
     
-    for idx, ticker_code in enumerate(raw_tickers):
-        ticker_code = str(ticker_code).strip().upper()
-        if len(ticker_code) != 4: 
-            continue
-            
-        ticker_sym = f"{ticker_code}.JK"
-        
-        if idx % 15 == 0 or idx == total - 1:
-            progress_bar.progress((idx + 1) / total, text=f"Menganalisis Struktur Fundamental & Volume: {ticker_code} ({idx+1}/{total})")
-            
+    with st.spinner(f"Sedang menarik data akurat untuk {ticker_input} dari pasar..."):
         try:
-            t = yf.Ticker(ticker_sym)
-            info = t.info
+            ticker = yf.Ticker(ticker_sym)
+            info = ticker.info
             
-            # --- PARAMETER METODE 1 & 2: VALUE & GROWTH INVESTING ---
+            # Cek validitas data terambil
+            if 'longName' not in info:
+                st.error(f"❌ Kode saham '{ticker_input}' tidak ditemukan atau tidak aktif di IDX. Pastikan kode terdiri dari 4 huruf.")
+                st.stop()
+                
+            # Mengambil data harga terakhir
+            current_price = info.get('currentPrice', info.get('regularMarketPrice', np.nan))
+            company_name = info.get('longName', 'N/A')
+            market_cap = info.get('marketCap', 0) / 1e9  # Ubah ke Miliar Rp
+            
+            # TAMPILAN HEADER RINGKASAN EMITEN
+            st.subheader(f"📊 {ticker_input} - {company_name}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Harga Terakhir", f"Rp {current_price:,}" if not pd.isna(current_price) else "N/A")
+            c2.metric("Market Capitalization", f"Rp {market_cap:,.2f} Miliar")
+            c3.metric("Sektor Industri", info.get('sector', 'N/A'))
+            st.write("---")
+            
+            # AMBIL DATA HISTORIS UNTUK TEKNIKAL & VOLUME (6 Bulan)
+            df_hist = ticker.history(period="6mo")
+            
+            # ==========================================
+            # METODE 1: VALUE INVESTING ANALYSIS
+            # ==========================================
+            st.markdown("<div class='report-card'>", unsafe_allow_html=True)
+            st.markdown("<h2>1. Value Investing (Analisis Valuasi & Aset)</h2>", unsafe_allow_html=True)
+            
             pbv = info.get('priceToBook', np.nan)
             pe = info.get('trailingPE', np.nan)
+            
+            v1, v2, _ = st.columns([1, 1, 2])
+            v1.markdown(f"<div class='metric-box'>PBV Ratio<br><span style='color:#2563eb; font-size:20px;'>{pbv if not pd.isna(pbv) else 'N/A'} x</span></div>", unsafe_allow_html=True)
+            v2.markdown(f"<div class='metric-box'>PE Ratio<br><span style='color:#2563eb; font-size:20px;'>{pe if not pd.isna(pe) else 'N/A'} x</span></div>", unsafe_allow_html=True)
+            
+            # Kesimpulan Metode 1
+            st.markdown("<h4>📌 Kesimpulan Valuasi:</h4>", unsafe_allow_html=True)
+            if not pd.isna(pbv) and not pd.isna(pe):
+                if pbv < 1.5 and pe < 10:
+                    st.success("🟢 **UNDERVALUED (Murah):** Saham ini tergolong murah secara aset dan laba harian. Memiliki *Margin of Safety* yang sangat aman untuk investasi jangka panjang.")
+                elif pbv < 3.0 and pe < 18:
+                    st.info("🟡 **FAIR VALUE (Wajar):** Valuasi saham berada di rentang wajar perusahaan bertumbuh. Risiko moderat.")
+                else:
+                    st.error("🔴 **OVERVALUED (Mahal):** Harga pasar sudah terlampau premium/mahal dibanding nilai buku dan laba bersih aktualnya.")
+            else:
+                st.warning("Data finansial tidak lengkap untuk menghitung valuasi.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # ==========================================
+            # METODE 2: GROWTH INVESTING ANALYSIS
+            # ==========================================
+            st.markdown("<div class='report-card'>", unsafe_allow_html=True)
+            st.markdown("<h2>2. Growth Investing (Analisis Skalabilitas & Profitabilitas)</h2>", unsafe_allow_html=True)
+            
             roe = info.get('returnOnEquity', np.nan)
-            der = info.get('debtToEquity', np.nan)  # Rasio Utang
-            rev_growth = info.get('revenueGrowth', np.nan)  # Pertumbuhan Pendapatan
-            market_cap = info.get('marketCap', 0)
-            price = info.get('currentPrice', info.get('regularMarketPrice', np.nan))
+            rev_growth = info.get('revenueGrowth', np.nan)
+            der = info.get('debtToEquity', np.nan)
             
-            if pd.isna(pbv) or pd.isna(pe) or pd.isna(roe) or market_cap == 0:
-                continue
+            g1, g2, g3 = st.columns(3)
+            g1.markdown(f"<div class='metric-box'>Return on Equity (ROE)<br><span style='color:#16a34a; font-size:20px;'>{round(roe*100, 2) if not pd.isna(roe) else 'N/A'} %</span></div>", unsafe_allow_html=True)
+            g2.markdown(f"<div class='metric-box'>Revenue Growth<br><span style='color:#16a34a; font-size:20px;'>{round(rev_growth*100, 2) if not pd.isna(rev_growth) else '0.0'} %</span></div>", unsafe_allow_html=True)
+            g3.markdown(f"<div class='metric-box'>Rasio Utang (DER)<br><span style='color:#dc2626; font-size:20px;'>{round(der, 2) if not pd.isna(der) else '0.0'} %</span></div>", unsafe_allow_html=True)
+            
+            # Kesimpulan Metode 2
+            st.markdown("<h4>📌 Kesimpulan Kinerja Bisnis:</h4>", unsafe_allow_html=True)
+            if not pd.isna(roe):
+                conditions = []
+                if roe > 0.15: conditions.append("perusahaan sangat efisien mencetak laba bersih (ROE > 15%)")
+                if not pd.isna(rev_growth) and rev_growth > 0.10: conditions.append("pendapatan bisnis bertumbuh sehat (>10%)")
+                if not pd.isna(der) and der < 150: conditions.append("tingkat utang aman di bawah batas risiko (<150%)")
                 
-            # --- PARAMETER METODE 3 & 4: ENTRY POINT & AKUMULASI (BANDARMOLOGI PROXY) ---
-            df_hist = t.history(period="6mo")
-            if len(df_hist) < 50:
-                continue
+                if len(conditions) >= 2:
+                    st.success(f"🟢 **HIGH GROWTH & STABLE:** Bisnis berjalan sangat impresif karena {', '.join(conditions)}. Memiliki struktur internal yang kuat untuk menjadi raja sektor di masa depan.")
+                else:
+                    st.warning("🟡 **SLOW/RISKY GROWTH:** Pertumbuhan usaha cenderung melambat atau terbebani oleh rasio utang yang tinggi. Efisiensi modal perlu diperhatikan.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # ==========================================
+            # METODE 3: BANDARMOLOGI PROXY (VOLUME SPIKE)
+            # ==========================================
+            st.markdown("<div class='report-card'>", unsafe_allow_html=True)
+            st.markdown("<h2>3. Proxy Bandarmologi (Analisis Akumulasi Likuiditas)</h2>", unsafe_allow_html=True)
+            
+            if len(df_hist) >= 20:
+                df_hist['Avg_Vol_20'] = df_hist['Volume'].rolling(window=20).mean()
+                latest_row = df_hist.iloc[-1]
                 
-            df_hist['MA50'] = df_hist['Close'].rolling(window=50).mean()
-            df_hist['Avg_Vol_20'] = df_hist['Volume'].rolling(window=20).mean()
+                current_volume = latest_row['Volume']
+                avg_vol_20 = latest_row['Avg_Vol_20']
+                vol_ratio = current_volume / avg_vol_20 if avg_vol_20 > 0 else 0
+                
+                b1, _ = st.columns([1, 3])
+                b1.markdown(f"<div class='metric-box'>Volume Ratio Hari Ini<br><span style='color:#ca8a04; font-size:20px;'>{round(vol_ratio, 2)} x</span></div>", unsafe_allow_html=True)
+                
+                st.markdown("<h4>📌 Kesimpulan Deteksi Bandar/Institusi:</h4>", unsafe_allow_html=True)
+                if vol_ratio >= 2.0:
+                    st.success(f"🟢 **MASSIVE ACCUMULATION:** Terjadi lonjakan volume luar biasa ({round(vol_ratio, 1)}x lipat dari rata-rata). Ini adalah tanda valid bahwa **Big Money / Bandar sedang melakukan pembelian masif**.")
+                elif vol_ratio >= 1.3:
+                    st.info(f"🟡 **NORMAL ACCUMULATION:** Volume di atas rata-rata harian harian. Ada ketertarikan pasar yang konstan dari institusi keuangan.")
+                else:
+                    st.error("🔴 **NO ACCUMULATION / SILENT:** Perdagangan sepi dan volume berada di bawah rata-rata. Pihak pengendali pasar (Bandar) sedang tidak menggerakkan saham ini.")
+            else:
+                st.warning("Data historis tidak mencukupi untuk analisis volume harian.")
+            st.markdown("</div>", unsafe_allow_html=True)
             
-            latest = df_hist.iloc[-1]
-            ma50_val = latest['MA50'] if not pd.isna(latest['MA50']) else df_hist['Close'].mean()
-            current_volume = latest['Volume']
-            avg_vol_20 = latest['Avg_Vol_20']
+            # ==========================================
+            # METODE 4: TECHNICAL & ENTRY POINT TIMING
+            # ==========================================
+            st.markdown("<div class='report-card'>", unsafe_allow_html=True)
+            st.markdown("<h2>4. Technical Analysis (Penentuan Waktu Entry Tepat)</h2>", unsafe_allow_html=True)
             
-            # Rasio lonjakan volume harian dibanding rata-rata 20 hari
-            volume_ratio = current_volume / avg_vol_20 if avg_vol_20 > 0 else 0
-            
-            all_data.append({
-                "Ticker": ticker_code,
-                "Nama Perusahaan": info.get('longName', 'N/A'),
-                "Harga (Rp)": price,
-                "Market Cap (Miliar Rp)": round(market_cap / 1e9, 2),
-                "PBV (x)": round(pbv, 2),
-                "PE Ratio (x)": round(pe, 2),
-                "ROE (%)": round(roe * 100, 2),
-                "DER (%)": round(der, 2) if not pd.isna(der) else 0.0,
-                "Revenue Growth (%)": round(rev_growth * 100, 2) if not pd.isna(rev_growth) else 0.0,
-                "Volume Ratio (x)": round(volume_ratio, 2),
-                "Is Uptrend": price > ma50_val
-            })
-        except:
-            continue
-            
-    progress_bar.empty()
-    return pd.DataFrame(all_data)
+            if len(df_hist) >= 50:
+                df_hist['MA50'] = df_hist['Close'].rolling(window=50).mean()
+                latest_row = df_hist.iloc[-1]
+                ma50_val = latest_row['MA50']
+                
+                t1, _ = st.columns([1, 3])
+                trend_status = "BULLISH (Di Atas MA50)" if current_price > ma50_val else "BEARISH (Di Bawah MA50)"
+                trend_color = "#16a34a" if current_price > ma50_val else "#dc2626"
+                t1.markdown(f"<div class='metric-box'>Tren Harga Jangka Menengah<br><span style='color:{trend_color}; font-size:18px;'>{trend_status}</span></div>", unsafe_allow_html=True)
+                
+                st.markdown("<h4>📌 Kesimpulan Momentum Entry:</h4>", unsafe_allow_html=True)
+                if current_price > ma50_val and vol_ratio >= 1.5:
+                    st.success("🎯 **STRONG ENTRY POINT (Waktu Sempurna):** Saham terkonfirmasi berada di tren naik (*Uptrend*) sekaligus didukung lonjakan volume akumulasi besar. Momen ideal untuk *Buy* demi memaksimalkan keuntungan cepat.")
+                elif current_price > ma50_val:
+                    st.info("🟡 **HOLD / WAIT FOR BREAKOUT:** Tren utama sudah bagus (*Uptrend*), namun belum ada ledakan volume transaksi hari ini. Disarankan mencicil beli perlahan atau tunggu *breakout volume*.")
+                else:
+                    st.error("🔴 **AVOID (Jangan Masuk Dulu):** Saham sedang berada di fase *Downtrend*. Walaupun harganya murah, masuk sekarang berisiko membuat modal Anda tertidur lama menunggu pembalikan arah.")
+            else:
+                st.warning("Data historis harga tidak cukup untuk menghitung Moving Average.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-# Load data utama ke memory cache
-df_idx = load_all_idx_data()
-
-# ==========================================
-# 3. INTERFACE UTAMA (DASHBOARD KONTROL TOTAL)
-# ==========================================
-
-st.title("🚀 IDX Ultimate Multibagger Screener")
-st.caption("Sistem Integrasi: Value Investing + Growth Scaling + Proxy Akumulasi Bandarmologi")
-st.write("---")
-
-# SIDEBAR DENGAN PARAMETER YANG DI-GABUNGKAN SECARA TOTAL
-st.sidebar.header("🎛️ Parameter Pencarian Multibagger")
-st.sidebar.write("Sesuaikan batas toleransi parameter finansial:")
-
-# Kelompok 1: Ukuran & Valuasi (Value Investing)
-st.sidebar.subheader("1. Kriteria Ukuran & Valuasi")
-max_market_cap = st.sidebar.slider("Maksimal Market Cap (Miliar Rp)", 100, 500000, 15000, step=500, help="Saham < 15T jauh lebih mudah multibagger")
-max_pbv = st.sidebar.slider("Maksimal PBV (x)", 0.1, 10.0, 2.5, step=0.1)
-max_pe = st.sidebar.slider("Maksimal PE Ratio (x)", 1, 50, 15, step=1)
-
-# Kelompok 2: Profitabilitas & Pertumbuhan (Growth Investing)
-st.sidebar.subheader("2. Kinerja & Pertumbuhan")
-min_roe = st.sidebar.slider("Minimal ROE (%)", -10, 100, 12, step=1)
-min_growth = st.sidebar.slider("Minimal Pertumbuhan Pendapatan (%)", -20, 200, 10, step=5, help="Perusahaan harus bertumbuh secara bisnis")
-max_der = st.sidebar.slider("Maksimal Rasio Utang / DER (%)", 10, 500, 150, step=10, help="Menghindari perusahaan bangkrut")
-
-# Kelompok 3: Timing Masuk & Aksi Bandar (Technical & Volume Spike)
-st.sidebar.subheader("3. Timing Entry & Lonjakan Volume")
-min_vol_ratio = st.sidebar.slider("Minimal Lonjakan Volume (x lipat)", 0.5, 5.0, 1.5, step=0.1, help="Mendeteksi akumulasi oleh institusi atau 'Bandar'")
-only_uptrend = st.sidebar.checkbox("Hanya Tampilkan Saham Uptrend (Harga > MA50)", value=True)
-
-# PROSES FILTER MASAL MENGGUNAKAN SELURUH INPUT DI ATAS
-df_filtered = df_idx[
-    (df_idx["Market Cap (Miliar Rp)"] <= max_market_cap) &
-    (df_idx["PBV (x)"] <= max_pbv) &
-    (df_idx["PE Ratio (x)"] <= max_pe) &
-    (df_idx["ROE (%)"] >= min_roe) &
-    (df_idx["Revenue Growth (%)"] >= min_growth) &
-    (df_idx["DER (%)"] <= max_der) &
-    (df_idx["Volume Ratio (x)"] >= min_vol_ratio)
-]
-
-if only_uptrend:
-    df_filtered = df_filtered[df_filtered["Is Uptrend"] == True]
-
-# DYNAMIC METRICS FOR UX SUMMARY
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Total Saham di IDX", f"{len(df_idx)} Emiten")
-with col2:
-    st.metric("Saham Lolos Filter Ketat", f"{len(df_filtered)} Emiten")
-with col3:
-    super_signal = len(df_filtered[df_filtered["Volume Ratio (x)"] >= 2.0])
-    st.metric("Saham Mengalami Akumulasi Masif (>2x Vol)", f"{super_signal} Emiten")
-
-st.write("### 📋 Daftar Saham Lolos Seleksi Parameter Maksimal")
-st.write("Klik judul kolom pada tabel untuk mengurutkan saham dari yang paling potensial (misal urutkan berdasarkan Volume Ratio tertinggi untuk melihat aksi akumulasi terbesar hari ini).")
-
-# TAMPILAN OUTPUT DATA UTAMA
-if not df_filtered.empty:
-    # Urutkan berdasarkan lonjakan volume transaksi tertinggi sebagai default
-    df_final = df_filtered.sort_values(by="Volume Ratio (x)", ascending=False)
-    
-    # Drop kolom bantuan agar tabel bersih
-    df_display = df_final.drop(columns=["Is Uptrend"])
-    
-    st.dataframe(
-        df_display, 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Ticker": st.column_config.TextColumn("Kode Saham"),
-            "Harga (Rp)": st.column_config.NumberColumn("Harga", format="Rp %d"),
-            "Market Cap (Miliar Rp)": st.column_config.NumberColumn("Market Cap", format="%d M"),
-            "ROE (%)": st.column_config.NumberColumn("ROE", format="%.2f %%"),
-            "DER (%)": st.column_config.NumberColumn("DER (Utang)", format="%.2f %%"),
-            "Revenue Growth (%)": st.column_config.NumberColumn("Pertumbuhan", format="%.2f %%"),
-            "Volume Ratio (x)": st.column_config.NumberColumn("Lonjakan Volume (Bandar)", format="%.2f x"),
-        }
-    )
-else:
-    st.warning("⚠️ Kombinasi parameter Anda terlalu ketat sehingga tidak ada emiten yang lolos hari ini. Coba turunkan syarat 'Minimal Pertumbuhan' atau longgarkan 'Maksimal PE Ratio' di menu sebelah kiri.")
-
-st.write("---")
-st.info("""
-💡 **Panduan Membaca Sinyal Integrasi Multibagger:**
-* **Metode Value & Growth:** Saham dengan ROE tinggi, DER rendah, dan Revenue Growth positif menunjukkan bisnis asli perusahaan tersebut sangat sehat dan berkembang pesat.
-* **Metode Entry & Volume Ratio (Aksi Pasar):** Jika nilai **Volume Ratio di atas 1.5x**, artinya volume perdagangan hari ini melonjak tajam melampaui kebiasaannya dalam 20 hari terakhir. Ini adalah indikator valid bahwa **ada transaksi berskala besar (akumulasi institusi/bandar)** yang siap mendorong harga saham murah ini terbang naik.
-""")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan saat memproses data: {str(e)}")
